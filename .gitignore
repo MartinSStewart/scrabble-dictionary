@@ -1,4 +1,2 @@
 elm-stuff/
-.lamdera/
-lamdera-stuff/
-*.lamdera.log
+.idea

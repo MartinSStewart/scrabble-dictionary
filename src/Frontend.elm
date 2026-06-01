@@ -116,7 +116,6 @@ viewForm model =
         [ Html.input
             [ Attr.class "input"
             , Attr.type_ "text"
-            , Attr.placeholder "e.g. qi"
             , Attr.value model.input
             , Attr.autofocus True
             , Attr.attribute "autocomplete" "off"
@@ -138,7 +137,7 @@ viewResult status =
         Loading word ->
             Html.div [ Attr.class "result" ]
                 [ Html.p [ Attr.class "loading" ]
-                    [ Html.text ("Checking \"" ++ word ++ "\"\u{2026}") ]
+                    [ Html.text ("Checking \"" ++ word ++ "\"…") ]
                 ]
 
         Loaded result ->
@@ -154,13 +153,13 @@ viewVerdict result =
         ( cls, symbol, message ) =
             if result.isValid then
                 ( "verdict valid"
-                , "\u{2713}"
+                , "✓"
                 , "\"" ++ result.word ++ "\" is a valid Scrabble word!"
                 )
 
             else
                 ( "verdict invalid"
-                , "\u{2717}"
+                , "✗"
                 , "\"" ++ result.word ++ "\" is not a valid Scrabble word."
                 )
     in
