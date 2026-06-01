@@ -3,10 +3,12 @@ module Frontend exposing (app)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
 import Html exposing (Html)
-import Html.Attributes as Attr
-import Html.Events as Events
 import Lamdera
 import Types exposing (..)
+import Ui exposing (Element)
+import Ui.Events
+import Ui.Font
+import Ui.Input
 import Url
 
 
@@ -89,6 +91,69 @@ updateFromBackend msg model =
 
 
 
+-- COLORS
+
+
+type alias Color =
+    Ui.Color
+
+
+pageBg : Color
+pageBg =
+    Ui.rgb 240 244 248
+
+
+cardBg : Color
+cardBg =
+    Ui.rgb 255 255 255
+
+
+ink : Color
+ink =
+    Ui.rgb 31 41 51
+
+
+muted : Color
+muted =
+    Ui.rgb 82 96 109
+
+
+faint : Color
+faint =
+    Ui.rgb 123 135 148
+
+
+inputBorder : Color
+inputBorder =
+    Ui.rgb 203 210 217
+
+
+accent : Color
+accent =
+    Ui.rgb 59 130 246
+
+
+validBg : Color
+validBg =
+    Ui.rgb 227 249 229
+
+
+validInk : Color
+validInk =
+    Ui.rgb 32 114 39
+
+
+invalidBg : Color
+invalidBg =
+    Ui.rgb 255 227 227
+
+
+invalidInk : Color
+invalidInk =
+    Ui.rgb 166 27 27
+
+
+
 -- VIEW
 
 
@@ -96,174 +161,152 @@ view : Model -> Browser.Document FrontendMsg
 view model =
     { title = "Scrabble Word Checker"
     , body =
-        [ Html.node "style" [] [ Html.text css ]
-        , Html.div [ Attr.class "page" ]
-            [ Html.div [ Attr.class "card" ]
-                [ Html.h1 [ Attr.class "title" ] [ Html.text "Scrabble Word Checker" ]
-                , Html.p [ Attr.class "subtitle" ]
-                    [ Html.text "Type a word and press Enter to check if it's a valid Scrabble word (TWL06)." ]
-                , viewForm model
-                , viewResult model.status
-                ]
+        [ Ui.layout
+            [ Ui.background pageBg
+            , Ui.height Ui.fill
+            , Ui.paddingXY 16 32
+            , Ui.Font.color ink
+            , Ui.Font.size 16
             ]
+            (Ui.el
+                [ Ui.centerX
+                , Ui.width Ui.fill
+                , Ui.widthMax 560
+                , Ui.contentTop
+                ]
+                (card model)
+            )
         ]
     }
 
 
-viewForm : Model -> Html FrontendMsg
-viewForm model =
-    Html.form [ Attr.class "form", Events.onSubmit Submit ]
-        [ Html.input
-            [ Attr.class "input"
-            , Attr.type_ "text"
-            , Attr.value model.input
-            , Attr.autofocus True
-            , Attr.attribute "autocomplete" "off"
-            , Attr.attribute "autocapitalize" "none"
-            , Attr.spellcheck False
-            , Events.onInput InputChanged
+card : Model -> Element FrontendMsg
+card model =
+    Ui.column
+        [ Ui.background cardBg
+        , Ui.rounded 16
+        , Ui.padding 24
+        , Ui.width Ui.fill
+        , Ui.spacing 20
+        ]
+        [ Ui.column [ Ui.spacing 8 ]
+            [ Ui.el [ Ui.Font.size 26, Ui.Font.bold ] (Ui.text "Scrabble Word Checker")
+            , Ui.el [ Ui.Font.size 15, Ui.Font.color muted ]
+                (Ui.text "Type a word and press Enter to check if it's a valid Scrabble word (TWL06).")
             ]
-            []
-        , Html.button [ Attr.class "button", Attr.type_ "submit" ] [ Html.text "Check" ]
+        , viewForm model
+        , viewResult model.status
         ]
 
 
-viewResult : Status -> Html FrontendMsg
+viewForm : Model -> Element FrontendMsg
+viewForm model =
+    Ui.row [ Ui.width Ui.fill, Ui.spacing 8 ]
+        [ Ui.Input.text
+            [ Ui.width Ui.fill
+            , Ui.padding 12
+            , Ui.rounded 10
+            , Ui.border 2
+            , Ui.borderColor inputBorder
+            , Ui.Font.size 18
+            , Ui.Events.onKey Ui.Events.enter Submit
+            ]
+            { onChange = InputChanged
+            , text = model.input
+            , placeholder = Just "e.g. qi"
+            , label = Ui.Input.labelHidden "Word to check"
+            }
+        , Ui.el
+            [ Ui.Input.button Submit
+            , Ui.background accent
+            , Ui.Font.color (Ui.rgb 255 255 255)
+            , Ui.Font.bold
+            , Ui.rounded 10
+            , Ui.paddingXY 18 12
+            , Ui.pointer
+            , Ui.contentCenterY
+            ]
+            (Ui.text "Check")
+        ]
+
+
+viewResult : Status -> Element FrontendMsg
 viewResult status =
     case status of
         Idle ->
-            Html.text ""
+            Ui.none
 
         Loading word ->
-            Html.div [ Attr.class "result" ]
-                [ Html.p [ Attr.class "loading" ]
-                    [ Html.text ("Checking \"" ++ word ++ "\"…") ]
-                ]
+            Ui.el [ Ui.Font.color muted, Ui.Font.italic ]
+                (Ui.text ("Checking \"" ++ word ++ "\"\u{2026}"))
 
         Loaded result ->
-            Html.div [ Attr.class "result" ]
+            Ui.column [ Ui.width Ui.fill, Ui.spacing 20 ]
                 [ viewVerdict result
                 , viewDefinition result
                 ]
 
 
-viewVerdict : WordResult -> Html FrontendMsg
+viewVerdict : WordResult -> Element FrontendMsg
 viewVerdict result =
     let
-        ( cls, symbol, message ) =
+        ( bg, fg, message ) =
             if result.isValid then
-                ( "verdict valid"
-                , "✓"
-                , "\"" ++ result.word ++ "\" is a valid Scrabble word!"
+                ( validBg
+                , validInk
+                , "\u{2713}  \"" ++ result.word ++ "\" is a valid Scrabble word!"
                 )
 
             else
-                ( "verdict invalid"
-                , "✗"
-                , "\"" ++ result.word ++ "\" is not a valid Scrabble word."
+                ( invalidBg
+                , invalidInk
+                , "\u{2717}  \"" ++ result.word ++ "\" is not a valid Scrabble word."
                 )
     in
-    Html.div [ Attr.class cls ]
-        [ Html.span [ Attr.class "symbol" ] [ Html.text symbol ]
-        , Html.span [] [ Html.text message ]
+    Ui.el
+        [ Ui.background bg
+        , Ui.Font.color fg
+        , Ui.Font.bold
+        , Ui.Font.size 18
+        , Ui.width Ui.fill
+        , Ui.rounded 10
+        , Ui.padding 14
         ]
+        (Ui.text message)
 
 
-viewDefinition : WordResult -> Html FrontendMsg
+viewDefinition : WordResult -> Element FrontendMsg
 viewDefinition result =
     case ( result.meanings, result.definitionError ) of
         ( [], Just err ) ->
-            Html.p [ Attr.class "def-note" ] [ Html.text err ]
+            Ui.el [ Ui.Font.color faint, Ui.Font.italic ] (Ui.text err)
 
         ( [], Nothing ) ->
-            Html.p [ Attr.class "def-note" ] [ Html.text "No definition available." ]
+            Ui.el [ Ui.Font.color faint, Ui.Font.italic ] (Ui.text "No definition available.")
 
         ( meanings, _ ) ->
-            Html.div [ Attr.class "definitions" ]
-                (Html.h2 [ Attr.class "def-heading" ] [ Html.text "Definition" ]
+            Ui.column [ Ui.width Ui.fill, Ui.spacing 14 ]
+                (Ui.el
+                    [ Ui.Font.size 13
+                    , Ui.Font.bold
+                    , Ui.Font.color faint
+                    ]
+                    (Ui.text "DEFINITION")
                     :: List.map viewMeaning meanings
                 )
 
 
-viewMeaning : Meaning -> Html FrontendMsg
+viewMeaning : Meaning -> Element FrontendMsg
 viewMeaning meaning =
-    Html.div [ Attr.class "meaning" ]
-        [ Html.div [ Attr.class "pos" ] [ Html.text meaning.partOfSpeech ]
-        , Html.ol [ Attr.class "def-list" ]
-            (List.map
-                (\d -> Html.li [] [ Html.text d ])
-                (List.take 3 meaning.definitions)
-            )
+    Ui.column [ Ui.width Ui.fill, Ui.spacing 6 ]
+        (Ui.el [ Ui.Font.italic, Ui.Font.color muted ] (Ui.text meaning.partOfSpeech)
+            :: List.indexedMap viewNumberedDefinition (List.take 3 meaning.definitions)
+        )
+
+
+viewNumberedDefinition : Int -> String -> Element FrontendMsg
+viewNumberedDefinition index definition =
+    Ui.row [ Ui.width Ui.fill, Ui.spacing 8, Ui.contentTop ]
+        [ Ui.el [ Ui.width (Ui.px 16), Ui.Font.color faint ] (Ui.text (String.fromInt (index + 1) ++ "."))
+        , Ui.el [ Ui.width Ui.fill ] (Ui.text definition)
         ]
-
-
-css : String
-css =
-    """
-* { box-sizing: border-box; }
-body { margin: 0; }
-.page {
-    min-height: 100vh;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 48px 16px;
-    background: linear-gradient(160deg, #f0f4f8 0%, #d9e2ec 100%);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #1f2933;
-}
-.card {
-    width: 100%;
-    max-width: 560px;
-    background: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-    padding: 32px;
-}
-.title { margin: 0 0 8px; font-size: 28px; }
-.subtitle { margin: 0 0 24px; color: #52606d; font-size: 15px; }
-.form { display: flex; gap: 8px; }
-.input {
-    flex: 1;
-    padding: 12px 14px;
-    font-size: 18px;
-    border: 2px solid #cbd2d9;
-    border-radius: 10px;
-    outline: none;
-    transition: border-color 0.15s ease;
-}
-.input:focus { border-color: #3b82f6; }
-.button {
-    padding: 12px 20px;
-    font-size: 16px;
-    font-weight: 600;
-    color: #ffffff;
-    background: #3b82f6;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-.button:hover { background: #2563eb; }
-.result { margin-top: 24px; }
-.loading { color: #52606d; font-style: italic; }
-.verdict {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 16px;
-    border-radius: 10px;
-    font-size: 18px;
-    font-weight: 600;
-}
-.verdict .symbol { font-size: 22px; }
-.verdict.valid { background: #e3f9e5; color: #207227; }
-.verdict.invalid { background: #ffe3e3; color: #a61b1b; }
-.definitions { margin-top: 20px; }
-.def-heading { font-size: 16px; text-transform: uppercase; letter-spacing: 0.05em; color: #7b8794; margin: 0 0 8px; }
-.meaning { margin-bottom: 14px; }
-.pos { font-style: italic; color: #3e4c59; margin-bottom: 4px; }
-.def-list { margin: 0; padding-left: 22px; line-height: 1.5; }
-.def-list li { margin-bottom: 4px; }
-.def-note { margin-top: 16px; color: #7b8794; font-style: italic; }
-"""
