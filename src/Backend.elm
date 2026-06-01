@@ -5,6 +5,7 @@ import Http
 import Json.Decode as Decode exposing (Decoder)
 import Lamdera exposing (ClientId, SessionId)
 import Types exposing (..)
+import Word exposing (Word)
 
 
 type alias Model =
@@ -49,28 +50,24 @@ update msg model =
                             }
             in
             ( model
-            , Lamdera.sendToFrontend clientId (WordChecked wordResult)
+            , Lamdera.sendToFrontend clientId (WordDefinitionResponse wordResult)
             )
 
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
 updateFromFrontend _ clientId msg model =
     case msg of
-        CheckWord rawWord ->
+        CheckWord word ->
             let
-                word =
-                    Dictionary.normalize rawWord
-
                 isValid =
                     Dictionary.isValidScrabbleWord word
             in
-            if String.isEmpty word then
-                ( model, Cmd.none )
-
-            else
-                ( { model | lookups = model.lookups + 1 }
+            ( { model | lookups = model.lookups + 1 }
+            , Cmd.batch
+                [ Lamdera.sendToFrontend clientId (WordCheckedResponse word isValid)
                 , fetchDefinition clientId word isValid
-                )
+                ]
+            )
 
 
 
@@ -80,10 +77,10 @@ updateFromFrontend _ clientId msg model =
 {-| Look up a word's definition using the free Dictionary API
 (<https://dictionaryapi.dev>), which needs no API key.
 -}
-fetchDefinition : ClientId -> String -> Bool -> Cmd BackendMsg
+fetchDefinition : ClientId -> Word -> Bool -> Cmd BackendMsg
 fetchDefinition clientId word isValid =
     Http.get
-        { url = "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ word
+        { url = "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ Word.toString word
         , expect = Http.expectJson (GotDefinition clientId word isValid) meaningsDecoder
         }
 
@@ -106,11 +103,11 @@ meaningDecoder =
         )
 
 
-httpErrorToMessage : String -> Http.Error -> String
+httpErrorToMessage : Word -> Http.Error -> String
 httpErrorToMessage word err =
     case err of
         Http.BadStatus 404 ->
-            "No dictionary definition found for \"" ++ word ++ "\"."
+            "No dictionary definition found for \"" ++ Word.toString word ++ "\"."
 
         Http.BadStatus code ->
             "The dictionary service returned an error (status " ++ String.fromInt code ++ ")."
@@ -125,4 +122,4 @@ httpErrorToMessage word err =
             "Couldn't look up that word."
 
         Http.BadBody _ ->
-            "No dictionary definition found for \"" ++ word ++ "\"."
+            "No dictionary definition found for \"" ++ Word.toString word ++ "\"."

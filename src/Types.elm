@@ -3,13 +3,17 @@ module Types exposing (..)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Http
+import Lamdera exposing (ClientId)
 import Url exposing (Url)
+import Word exposing (Word)
 
 
 type alias FrontendModel =
     { key : Key
     , input : String
     , status : Status
+    , windowWidth : Int
+    , windowHeight : Int
     }
 
 
@@ -17,8 +21,9 @@ type alias FrontendModel =
 -}
 type Status
     = Idle
-    | Loading String
+    | Loading Word (Maybe Bool)
     | Loaded WordResult
+    | InvalidWord String
 
 
 type alias BackendModel =
@@ -27,7 +32,7 @@ type alias BackendModel =
 
 
 type alias WordResult =
-    { word : String
+    { word : Word
     , isValid : Bool
     , meanings : List Meaning
     , definitionError : Maybe String
@@ -48,16 +53,18 @@ type FrontendMsg
     | UrlChanged Url
     | InputChanged String
     | Submit
+    | GotWindowSize Int Int
     | NoOpFrontendMsg
 
 
 type ToBackend
-    = CheckWord String
+    = CheckWord Word
 
 
 type BackendMsg
-    = GotDefinition String String Bool (Result Http.Error (List Meaning))
+    = GotDefinition ClientId Word Bool (Result Http.Error (List Meaning))
 
 
 type ToFrontend
-    = WordChecked WordResult
+    = WordDefinitionResponse WordResult
+    | WordCheckedResponse Word Bool

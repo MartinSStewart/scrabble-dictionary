@@ -1,15 +1,19 @@
 module Frontend exposing (app)
 
 import Browser exposing (UrlRequest(..))
+import Browser.Dom
+import Browser.Events
 import Browser.Navigation as Nav
 import Html exposing (Html)
 import Lamdera
+import Task
 import Types exposing (..)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
 import Url
+import Word exposing (Word)
 
 
 type alias Model =
@@ -23,7 +27,7 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = \_ -> Browser.Events.onResize GotWindowSize
         , view = view
         }
 
@@ -33,8 +37,10 @@ init _ key =
     ( { key = key
       , input = ""
       , status = Idle
+      , windowWidth = 1920
+      , windowHeight = 1080
       }
-    , Cmd.none
+    , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Browser.Dom.getViewport
     )
 
 
@@ -56,31 +62,31 @@ update msg model =
             ( { model | input = value }, Cmd.none )
 
         Submit ->
-            let
-                trimmed =
-                    String.trim model.input
-            in
-            if String.isEmpty trimmed then
-                ( model, Cmd.none )
+            case Word.fromString model.input of
+                Err error ->
+                    ( { model | status = InvalidWord error }, Cmd.none )
 
-            else
-                ( { model | status = Loading trimmed }
-                , Lamdera.sendToBackend (CheckWord trimmed)
-                )
+                Ok ok ->
+                    ( { model | status = Loading ok Nothing }
+                    , Lamdera.sendToBackend (CheckWord ok)
+                    )
 
         NoOpFrontendMsg ->
             ( model, Cmd.none )
+
+        GotWindowSize width height ->
+            ( { model | windowWidth = width, windowHeight = height }, Cmd.none )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
 updateFromBackend msg model =
     case msg of
-        WordChecked result ->
+        WordDefinitionResponse result ->
             -- Ignore stale results if the user has already moved on to a
             -- different word.
             case model.status of
-                Loading pending ->
-                    if String.toLower pending == String.toLower result.word then
+                Loading pending _ ->
+                    if pending == result.word then
                         ( { model | status = Loaded result }, Cmd.none )
 
                     else
@@ -88,6 +94,18 @@ updateFromBackend msg model =
 
                 _ ->
                     ( { model | status = Loaded result }, Cmd.none )
+
+        WordCheckedResponse word isValid ->
+            case model.status of
+                Loading pending _ ->
+                    if pending == word then
+                        ( { model | status = Loading pending (Just isValid) }, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
 
 
@@ -157,14 +175,28 @@ invalidInk =
 -- VIEW
 
 
+isMobile model =
+    model.windowWidth < 600
+
+
 view : Model -> Browser.Document FrontendMsg
 view model =
     { title = "Scrabble Word Checker"
     , body =
         [ Ui.layout
-            [ Ui.background pageBg
+            [ Ui.background
+                (if isMobile model then
+                    cardBg
+
+                 else
+                    pageBg
+                )
             , Ui.height Ui.fill
-            , Ui.paddingXY 16 32
+            , if isMobile model then
+                Ui.padding 0
+
+              else
+                Ui.paddingXY 16 32
             , Ui.Font.color ink
             , Ui.Font.size 16
             ]
@@ -192,7 +224,7 @@ card model =
         [ Ui.column [ Ui.spacing 8 ]
             [ Ui.el [ Ui.Font.size 26, Ui.Font.bold ] (Ui.text "Scrabble Word Checker")
             , Ui.el [ Ui.Font.size 15, Ui.Font.color muted ]
-                (Ui.text "Type a word and press Enter to check if it's a valid Scrabble word (TWL06).")
+                (Ui.text "Type a word and press Enter to check if it's a valid Scrabble word.")
             ]
         , viewForm model
         , viewResult model.status
@@ -225,6 +257,8 @@ viewForm model =
             , Ui.paddingXY 18 12
             , Ui.pointer
             , Ui.contentCenterY
+            , Ui.width Ui.shrink
+            , Ui.height Ui.fill
             ]
             (Ui.text "Check")
         ]
@@ -236,31 +270,42 @@ viewResult status =
         Idle ->
             Ui.none
 
-        Loading word ->
-            Ui.el [ Ui.Font.color muted, Ui.Font.italic ]
-                (Ui.text ("Checking \"" ++ word ++ "\"\u{2026}"))
+        Loading word isValid ->
+            case isValid of
+                Just isValid2 ->
+                    Ui.column [ Ui.spacing 20 ]
+                        [ viewVerdict word isValid2
+                        , Ui.el [ Ui.Font.color muted, Ui.Font.italic ] (Ui.text "Loading definition…")
+                        ]
+
+                Nothing ->
+                    Ui.el [ Ui.Font.color muted, Ui.Font.italic ]
+                        (Ui.text ("Checking \"" ++ Word.toString word ++ "\"…"))
 
         Loaded result ->
-            Ui.column [ Ui.width Ui.fill, Ui.spacing 20 ]
-                [ viewVerdict result
+            Ui.column [ Ui.spacing 20 ]
+                [ viewVerdict result.word result.isValid
                 , viewDefinition result
                 ]
 
+        InvalidWord string ->
+            Ui.text string
 
-viewVerdict : WordResult -> Element FrontendMsg
-viewVerdict result =
+
+viewVerdict : Word -> Bool -> Element FrontendMsg
+viewVerdict word isValid =
     let
         ( bg, fg, message ) =
-            if result.isValid then
+            if isValid then
                 ( validBg
                 , validInk
-                , "\u{2713}  \"" ++ result.word ++ "\" is a valid Scrabble word!"
+                , "✓  \"" ++ Word.toString word ++ "\" is valid!"
                 )
 
             else
                 ( invalidBg
                 , invalidInk
-                , "\u{2717}  \"" ++ result.word ++ "\" is not a valid Scrabble word."
+                , "✗  \"" ++ Word.toString word ++ "\" is not valid"
                 )
     in
     Ui.el
