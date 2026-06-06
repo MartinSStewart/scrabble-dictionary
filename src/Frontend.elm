@@ -1,4 +1,4 @@
-module Frontend exposing (app)
+port module Frontend exposing (app)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Dom
@@ -14,6 +14,9 @@ import Ui.Font
 import Ui.Input
 import Url
 import Word exposing (Word)
+
+
+port requestWakeLock : () -> Cmd msg
 
 
 type alias Model =
@@ -64,11 +67,11 @@ update msg model =
         Submit ->
             case Word.fromString model.input of
                 Err error ->
-                    ( { model | status = InvalidWord error }, Cmd.none )
+                    ( { model | status = InvalidWord error }, requestWakeLock () )
 
                 Ok ok ->
                     ( { model | status = Loading ok Nothing }
-                    , Lamdera.sendToBackend (CheckWord ok)
+                    , Cmd.batch [ requestWakeLock (), Lamdera.sendToBackend (CheckWord ok) ]
                     )
 
         NoOpFrontendMsg ->
